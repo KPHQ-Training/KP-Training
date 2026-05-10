@@ -30,9 +30,14 @@
 
   <script>
 (function() {
-  if (window.location.hash && /^#sd+$/.test(window.location.hash)) {
-    try { localStorage.removeItem('deck-stage:slide:' + (location.pathname || '/')); } catch(e) {}
-  }
+  if (!window.location.hash || !/^#s\d+$/.test(window.location.hash)) return;
+  var _orig = Storage.prototype.getItem;
+  Storage.prototype.getItem = function(key) {
+    if (typeof key === 'string' && key.indexOf('deck-stage:slide:') === 0) return null;
+    return _orig.call(this, key);
+  };
+  window.__deckStoragePatched = true;
+  window.__deckOrigGetItem = _orig;
 })();
 </script>
 <script>
@@ -186,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async function() {
   function navigateToHash() {
     var hash = window.location.hash;
     if (!hash) return;
-    var match = hash.match(/^#s(d+)$/);
+    var match = hash.match(/^#s(\d+)$/);
     if (!match) return;
     var slideNum = parseInt(match[1], 10);
     var deck = document.querySelector('deck-stage');
@@ -197,11 +202,13 @@ document.addEventListener('DOMContentLoaded', async function() {
   customElements.whenDefined('deck-stage').then(function() {
     var deck = document.querySelector('deck-stage');
     if (!deck) return;
-    deck.addEventListener('slidechange', function onReady() {
-      deck.removeEventListener('slidechange', onReady);
-      if (window.location.hash && /^#sd+$/.test(window.location.hash)) {
-        navigateToHash();
+    deck.addEventListener('slidechange', function onInit() {
+      deck.removeEventListener('slidechange', onInit);
+      // Restore real getItem so future saves/reads work normally
+      if (window.__deckStoragePatched && window.__deckOrigGetItem) {
+        Storage.prototype.getItem = window.__deckOrigGetItem;
       }
+      navigateToHash();
     });
   });
   window.addEventListener('hashchange', navigateToHash);
